@@ -17,7 +17,7 @@ load_dotenv(BASE / '.env')
 
 TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
 OPENROUTER_KEY = os.environ['OPENROUTER_API_KEY']
-OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'meta-llama/llama-3.1-8b-instruct:free')
+OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'google/gemini-2.0-flash-exp:free')
 ALLOWED_CHAT_ID = os.getenv('ALLOWED_CHAT_ID', '').strip()
 DB_PATH = os.getenv('DB_PATH', str(BASE / 'oleg_bot.sqlite3'))
 
@@ -160,8 +160,15 @@ async def ask_openrouter(text):
     headers = {'Authorization': f'Bearer {OPENROUTER_KEY}', 'Content-Type': 'application/json', 'HTTP-Referer': 'https://openrouter.ai', 'X-Title': 'Oleg Chat Bot'}
     payload = {'model': OPENROUTER_MODEL, 'messages': [{'role':'system','content':system},{'role':'user','content':text}], 'max_tokens':180, 'temperature':0.75}
     async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post('https://openrouter.ai/api/v1/chat/completions', headers=headers, json=payload)
-        r.raise_for_status(); data = r.json()
+        try:
+            r = await client.post('https://openrouter.ai/api/v1/chat/completions', headers=headers, json=payload)
+        except httpx.RequestError as exc:
+            log.error('OpenRouter request failed before receiving a response: %s', exc)
+            raise
+        if r.is_error:
+            log.error('OpenRouter HTTP error: status_code=%s response_text=%s', r.status_code, r.text[:4000])
+            r.raise_for_status()
+        data = r.json()
     return data['choices'][0]['message']['content'].strip()[:1000]
 
 
