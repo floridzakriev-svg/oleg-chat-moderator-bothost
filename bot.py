@@ -32,7 +32,8 @@ PROVOCATION_PATTERNS = [r'заткнись', r'иди сюда', r'слабо', 
 ADULT_WORDS = {'секс', 'порно', 'эротик', '18+', 'интим', 'наркотик'}
 POLITICS_WORDS = {'президент', 'выборы', 'правительств', 'партия', 'войн', 'политик'}
 RELIGION_WORDS = {'бог', 'церков', 'религ', 'ислам', 'христиан', 'атеизм'}
-TRIGGER = 'ОЛЕГ ОТВЕТ:'
+CODE_VERSION = '7fafaaa-trigger-fix-2'
+TRIGGERS = ('ОЛЕГ ОТВЕТЬ:', 'ОЛЕГ ОТВЕТ:')
 
 
 def db():
@@ -181,9 +182,10 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # filter. The trigger itself must never be treated as a violation. The
     # question text is still checked below, so spam/hate/insults in a question
     # remain moderated.
-    is_trigger = text.startswith(TRIGGER)
+    trigger = next((candidate for candidate in TRIGGERS if text.startswith(candidate)), None)
+    is_trigger = trigger is not None
     if is_trigger:
-        question = text[len(TRIGGER):].strip()
+        question = text[len(trigger):].strip()
         reason = violation_reason(question)
         if reason:
             log.info('Trigger question moderated: reason=%s', reason)
@@ -220,7 +222,7 @@ def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(MessageHandler(filters.ALL, on_message))
     app.job_queue.run_repeating(unmute_expired, interval=60, first=10)
-    log.info('Oleg bot started; model=%s allowed_chat=%s', OPENROUTER_MODEL, ALLOWED_CHAT_ID or 'all groups')
+    log.info('Oleg bot started; version=%s model=%s allowed_chat=%s', CODE_VERSION, OPENROUTER_MODEL, ALLOWED_CHAT_ID or 'all groups')
     # Explicitly request ordinary message updates. Update.ALL_TYPES also works,
     # but this list makes the polling contract visible in Bothost logs/config.
     app.run_polling(allowed_updates=['message', 'edited_message', 'channel_post', 'edited_channel_post'])
