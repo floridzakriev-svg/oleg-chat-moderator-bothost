@@ -156,7 +156,18 @@ async def ask_openrouter(text):
 
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
-    if not msg or not update.effective_chat or update.effective_chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP) or not is_allowed_chat(update): return
+    if not msg or not update.effective_chat:
+        log.info('Ignored update without effective message/chat: update_id=%s', update.update_id)
+        return
+    log.info('Incoming message: update_id=%s chat_id=%s chat_type=%s user_id=%s',
+             update.update_id, update.effective_chat.id, update.effective_chat.type,
+             update.effective_user.id if update.effective_user else None)
+    if update.effective_chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
+        log.info('Ignored non-group chat: chat_type=%s', update.effective_chat.type)
+        return
+    if not is_allowed_chat(update):
+        log.warning('Ignored chat not allowed: received=%s configured=%s', update.effective_chat.id, ALLOWED_CHAT_ID or 'all groups')
+        return
     text = msg.text or msg.caption or ''
     if msg.from_user and msg.from_user.is_bot:
         # Keep Oleg's own warnings and answers visible; remove messages from other bots.
@@ -196,6 +207,8 @@ def main():
     app.add_handler(MessageHandler(filters.ALL, on_message))
     app.job_queue.run_repeating(unmute_expired, interval=60, first=10)
     log.info('Oleg bot started; model=%s allowed_chat=%s', OPENROUTER_MODEL, ALLOWED_CHAT_ID or 'all groups')
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Explicitly request ordinary message updates. Update.ALL_TYPES also works,
+    # but this list makes the polling contract visible in Bothost logs/config.
+    app.run_polling(allowed_updates=['message', 'edited_message', 'channel_post', 'edited_channel_post'])
 
 if __name__ == '__main__': main()
