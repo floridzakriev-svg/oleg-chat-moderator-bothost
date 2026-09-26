@@ -32,7 +32,7 @@ PROVOCATION_PATTERNS = [r'заткнись', r'иди сюда', r'слабо', 
 ADULT_WORDS = {'секс', 'порно', 'эротик', '18+', 'интим', 'наркотик'}
 POLITICS_WORDS = {'президент', 'выборы', 'правительств', 'партия', 'войн', 'политик'}
 RELIGION_WORDS = {'бог', 'церков', 'религ', 'ислам', 'христиан', 'атеизм'}
-CODE_VERSION = '7fafaaa-trigger-fix-2'
+CODE_VERSION = 'moderation-humor-1'
 TRIGGERS = ('ОЛЕГ ОТВЕТЬ:', 'ОЛЕГ ОТВЕТ:')
 
 
@@ -112,7 +112,11 @@ async def punish_or_warn(update, context, reason):
     except Exception as e:
         log.warning('Could not delete violation: %s', e)
     if level <= 3 and count == 0:
-        warning = {1: 'Ещё раз нарушишь — замучу на 24 часа', 2: 'Ещё раз нарушишь — замучу на 48 часов', 3: 'Ещё раз нарушишь — замучу на 7 дней'}[level]
+        warning = {
+            1: 'Ещё раз так сделаешь — отправлю тебя на 24 часа в танки. Или по грибы. Кому что ближе.',
+            2: 'Ещё раз так сделаешь — отправлю тебя на 48 часов в огород. Грядки сами себя не перекопают.',
+            3: 'Ещё раз так сделаешь — отправлю тебя на неделю в тайгу. Собирать ягоды и думать о поведении.',
+        }[level]
         conn.execute('UPDATE users SET level_violations=1 WHERE chat_id=? AND user_id=?', (chat.id,user.id)); conn.commit()
         await context.bot.send_message(chat.id, f'Предупреждение для {user.mention_html()}: {warning}.', parse_mode='HTML')
         return
@@ -121,11 +125,16 @@ async def punish_or_warn(update, context, reason):
         await context.bot.restrict_chat_member(chat.id, user.id, permissions=restricted_permissions(), until_date=until)
         conn.execute('UPDATE users SET level=?, level_violations=0, active_mute_until=? WHERE chat_id=? AND user_id=?', (level+1,0,until,chat.id,user.id))
         conn.execute('INSERT OR REPLACE INTO mutes(chat_id,user_id,until_ts) VALUES(?,?,?)', (chat.id,user.id,until)); conn.commit()
-        await context.bot.send_message(chat.id, f'{user.mention_html()} получил мут на {format_duration(seconds)}.', parse_mode='HTML')
+        mute_message = {
+            86400: f'{user.mention_html()} отправляется на 24 часа играть в танки. Без права выхода в чат.',
+            172800: f'{user.mention_html()} пошёл на 48 часов в огород — копать грядки. Вернётся, когда наберётся терпения.',
+            7 * 86400: f'{user.mention_html()} отправлен на неделю в тайгу. Собирать ягоды и думать о поведении.',
+        }[seconds]
+        await context.bot.send_message(chat.id, mute_message, parse_mode='HTML')
         return
     await context.bot.ban_chat_member(chat.id, user.id)
     conn.execute('UPDATE users SET level=4, level_violations=0 WHERE chat_id=? AND user_id=?', (chat.id,user.id)); conn.commit()
-    await context.bot.send_message(chat.id, f'{user.mention_html()} заблокирован навсегда.', parse_mode='HTML')
+    await context.bot.send_message(chat.id, f'{user.mention_html()} заблокирован навсегда. Улетел в ГТА. Обратно не ждём.', parse_mode='HTML')
 
 
 async def unmute_expired(context: ContextTypes.DEFAULT_TYPE):
@@ -144,6 +153,7 @@ async def unmute_expired(context: ContextTypes.DEFAULT_TYPE):
 async def ask_openrouter(text):
     topic_block = contains_any(text, ADULT_WORDS | POLITICS_WORDS | RELIGION_WORDS)
     system = ('Ты Олег из проекта «Психика на минималках». Отвечай по-русски, спокойно, коротко, с мягкой самоиронией и бытовым юмором. '
+              'Отвечай как живой Олег: с бытовыми шутками, самоиронией, иногда неожиданными сравнениями. Избегай шаблонных фраз. Разнообразь ответы. '
               'Не утверждай, что ты настоящий человек. На темы 18+, политики и религии вежливо уклоняйся, не молчи: пошути и переведи разговор на нейтральную бытовую тему. '
               'Ответ до 500 символов, без токсичности, угроз и медицинских советов.')
     if topic_block: system += ' Пользователь затронул чувствительную тему — обязательно мягко уклонись и переведи разговор.'
