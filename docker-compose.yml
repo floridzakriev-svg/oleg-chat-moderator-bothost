@@ -1,0 +1,12 @@
+services:
+  oleg-chat-bot:
+    build: .
+    container_name: oleg-chat-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - oleg_bot_data:/app/data
+
+volumes:
+  oleg_bot_data:
