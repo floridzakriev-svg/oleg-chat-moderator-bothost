@@ -176,11 +176,25 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try: await msg.delete()
         except Exception as e: log.warning('Could not delete bot message: %s', e)
         return
-    reason = violation_reason(text)
-    if reason:
-        await punish_or_warn(update, context, reason); return
-    if not text.startswith(TRIGGER): return
-    question = text[len(TRIGGER):].strip()
+
+    # Recognize the Oleg trigger before applying the whole-message moderation
+    # filter. The trigger itself must never be treated as a violation. The
+    # question text is still checked below, so spam/hate/insults in a question
+    # remain moderated.
+    is_trigger = text.startswith(TRIGGER)
+    if is_trigger:
+        question = text[len(TRIGGER):].strip()
+        reason = violation_reason(question)
+        if reason:
+            log.info('Trigger question moderated: reason=%s', reason)
+            await punish_or_warn(update, context, reason)
+            return
+    else:
+        reason = violation_reason(text)
+        if reason:
+            await punish_or_warn(update, context, reason)
+        return
+
     if len(question) > 300:
         await msg.reply_text('Вопрос слишком длинный. Олег уже устал до первой строки — максимум 300 символов.')
         return
