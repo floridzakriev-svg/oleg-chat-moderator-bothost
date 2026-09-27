@@ -32,8 +32,19 @@ PROVOCATION_PATTERNS = [r'заткнись', r'иди сюда', r'слабо', 
 ADULT_WORDS = {'секс', 'порно', 'эротик', '18+', 'интим', 'наркотик'}
 POLITICS_WORDS = {'президент', 'выборы', 'правительств', 'партия', 'войн', 'политик'}
 RELIGION_WORDS = {'бог', 'церков', 'религ', 'ислам', 'христиан', 'атеизм'}
-CODE_VERSION = 'moderation-humor-1'
+CODE_VERSION = 'moderation-humor-1-post-style-v1'
 TRIGGERS = ('ОЛЕГ ОТВЕТЬ:', 'ОЛЕГ ОТВЕТ:')
+
+# Shared post-generation contract. The scheduled image generation runs in Manus;
+# these constants keep the Bothost bot aligned with the approved project style.
+POST_STYLE_VERSION = 'comic-segments-v1'
+POST_LOGO_POSITION = 'top-right'
+POST_LOGO_BRAIN_COLOR = 'yellow'
+POST_LOGO_TEXT_COLOR = 'turquoise'
+POST_CHARGE_LABEL = '[ЗАРЯД ОЛЕГА: X%]'
+POST_CHARGE_SEGMENTS = 10
+POST_CHARGE_COLORS = {'low': 'red', 'medium': 'yellow', 'high': 'green'}
+POST_USED_JOKES_FILE = os.getenv('POST_USED_JOKES_FILE', str(BASE / 'used_post_jokes.json'))
 
 
 def db():
