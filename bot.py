@@ -16,8 +16,8 @@ BASE = Path(__file__).resolve().parent
 load_dotenv(BASE / '.env')
 
 TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
-OPENROUTER_KEY = os.environ['OPENROUTER_API_KEY']
-OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'google/gemini-2.0-flash-exp:free')
+GROQ_KEY = os.environ['GROQ_API_KEY']
+GROQ_MODEL = os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
 ALLOWED_CHAT_ID = os.getenv('ALLOWED_CHAT_ID', '').strip()
 DB_PATH = os.getenv('DB_PATH', str(BASE / 'oleg_bot.sqlite3'))
 
@@ -32,7 +32,7 @@ PROVOCATION_PATTERNS = [r'заткнись', r'иди сюда', r'слабо', 
 ADULT_WORDS = {'секс', 'порно', 'эротик', '18+', 'интим', 'наркотик'}
 POLITICS_WORDS = {'президент', 'выборы', 'правительств', 'партия', 'войн', 'политик'}
 RELIGION_WORDS = {'бог', 'церков', 'религ', 'ислам', 'христиан', 'атеизм'}
-CODE_VERSION = 'moderation-humor-1-post-style-v1'
+CODE_VERSION = 'moderation-humor-1-groq-v1-post-style-v1'
 TRIGGERS = ('ОЛЕГ ОТВЕТЬ:', 'ОЛЕГ ОТВЕТ:')
 
 # Shared post-generation contract. The scheduled image generation runs in Manus;
@@ -161,23 +161,37 @@ async def unmute_expired(context: ContextTypes.DEFAULT_TYPE):
             log.warning('Could not unmute %s/%s: %s', row['chat_id'], row['user_id'], e)
 
 
-async def ask_openrouter(text):
+def extract_oleg_question(text):
+    """Return the question after an Oleg trigger, or None when not triggered."""
+    value = (text or '').lstrip()
+    folded = value.casefold()
+    for candidate in TRIGGERS:
+        prefix = candidate.casefold()
+        if folded.startswith(prefix):
+            return value[len(candidate):].strip()
+    # Accept the simple form "ОЛЕГ как дела?" in any letter case.
+    if re.match(r'^олег(?=\s|$|:)', folded):
+        return value[4:].lstrip(' \t:,-')
+    return None
+
+
+async def ask_groq(text):
     topic_block = contains_any(text, ADULT_WORDS | POLITICS_WORDS | RELIGION_WORDS)
     system = ('Ты Олег из проекта «Психика на минималках». Отвечай по-русски, спокойно, коротко, с мягкой самоиронией и бытовым юмором. '
               'Отвечай как живой Олег: с бытовыми шутками, самоиронией, иногда неожиданными сравнениями. Избегай шаблонных фраз. Разнообразь ответы. '
               'Не утверждай, что ты настоящий человек. На темы 18+, политики и религии вежливо уклоняйся, не молчи: пошути и переведи разговор на нейтральную бытовую тему. '
               'Ответ до 500 символов, без токсичности, угроз и медицинских советов.')
     if topic_block: system += ' Пользователь затронул чувствительную тему — обязательно мягко уклонись и переведи разговор.'
-    headers = {'Authorization': f'Bearer {OPENROUTER_KEY}', 'Content-Type': 'application/json', 'HTTP-Referer': 'https://openrouter.ai', 'X-Title': 'Oleg Chat Bot'}
-    payload = {'model': OPENROUTER_MODEL, 'messages': [{'role':'system','content':system},{'role':'user','content':text}], 'max_tokens':180, 'temperature':0.75}
+    headers = {'Authorization': f'Bearer {GROQ_KEY}', 'Content-Type': 'application/json'}
+    payload = {'model': GROQ_MODEL, 'messages': [{'role':'system','content':system},{'role':'user','content':text}], 'max_tokens':180, 'temperature':0.75}
     async with httpx.AsyncClient(timeout=30) as client:
         try:
-            r = await client.post('https://openrouter.ai/api/v1/chat/completions', headers=headers, json=payload)
+            r = await client.post('https://api.groq.com/openai/v1/chat/completions', headers=headers, json=payload)
         except httpx.RequestError as exc:
-            log.error('OpenRouter request failed before receiving a response: %s', exc)
+            log.error('Groq request failed before receiving a response: %s', exc)
             raise
         if r.is_error:
-            log.error('OpenRouter HTTP error: status_code=%s response_text=%s', r.status_code, r.text[:4000])
+            log.error('Groq HTTP error: status_code=%s response_text=%s', r.status_code, r.text[:4000])
             r.raise_for_status()
         data = r.json()
     return data['choices'][0]['message']['content'].strip()[:1000]
@@ -210,10 +224,9 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # filter. The trigger itself must never be treated as a violation. The
     # question text is still checked below, so spam/hate/insults in a question
     # remain moderated.
-    trigger = next((candidate for candidate in TRIGGERS if text.startswith(candidate)), None)
-    is_trigger = trigger is not None
+    question = extract_oleg_question(text)
+    is_trigger = question is not None
     if is_trigger:
-        question = text[len(trigger):].strip()
         reason = violation_reason(question)
         if reason:
             log.info('Trigger question moderated: reason=%s', reason)
@@ -239,10 +252,10 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     conn.execute('UPDATE users SET daily_questions=?, daily_date=?, last_question=? WHERE chat_id=? AND user_id=?', (count+1,today,now,update.effective_chat.id,update.effective_user.id)); conn.commit()
     try:
-        answer = await ask_openrouter(question)
+        answer = await ask_groq(question)
         await msg.reply_text(answer)
     except Exception:
-        log.exception('OpenRouter request failed')
+        log.exception('Groq request failed')
         await msg.reply_text('Олег хотел ответить умно, но нейросеть ушла на обед. Попробуй ещё раз чуть позже.')
 
 
@@ -250,7 +263,7 @@ def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(MessageHandler(filters.ALL, on_message))
     app.job_queue.run_repeating(unmute_expired, interval=60, first=10)
-    log.info('Oleg bot started; version=%s model=%s allowed_chat=%s', CODE_VERSION, OPENROUTER_MODEL, ALLOWED_CHAT_ID or 'all groups')
+    log.info('Oleg bot started; version=%s model=%s allowed_chat=%s', CODE_VERSION, GROQ_MODEL, ALLOWED_CHAT_ID or 'all groups')
     # Explicitly request ordinary message updates. Update.ALL_TYPES also works,
     # but this list makes the polling contract visible in Bothost logs/config.
     app.run_polling(allowed_updates=['message', 'edited_message', 'channel_post', 'edited_channel_post'])

@@ -23,8 +23,8 @@
 
 ```text
 TELEGRAM_BOT_TOKEN=токен @Avkartbot
-OPENROUTER_API_KEY=ключ OpenRouter
-OPENROUTER_MODEL=meta-llama/llama-3.1-8b-instruct:free
+GROQ_API_KEY=ключ Groq
+GROQ_MODEL=llama-3.3-70b-versatile
 ALLOWED_CHAT_ID=числовой ID чата «Психика на минималках Чат»
 DB_PATH=/app/data/oleg_bot.sqlite3
 LOG_LEVEL=INFO
@@ -53,7 +53,7 @@ Oleg bot started
 Затем проверьте в чате:
 
 ```text
-ОЛЕГ ОТВЕТ: как дела?
+ОЛЕГ как дела?
 ```
 
 Тестовое сообщение бот сам не отправляет.
