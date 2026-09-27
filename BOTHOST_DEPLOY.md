@@ -23,8 +23,9 @@
 
 ```text
 TELEGRAM_BOT_TOKEN=токен @Avkartbot
-GROQ_API_KEY=ключ Groq
-GROQ_MODEL=llama-3.3-70b-versatile
+YANDEX_API_KEY=ключ Yandex Cloud
+YANDEX_FOLDER_ID=идентификатор каталога Yandex Cloud
+YANDEX_MODEL=yandexgpt/latest
 ALLOWED_CHAT_ID=числовой ID чата «Психика на минималках Чат»
 DB_PATH=/app/data/oleg_bot.sqlite3
 LOG_LEVEL=INFO
